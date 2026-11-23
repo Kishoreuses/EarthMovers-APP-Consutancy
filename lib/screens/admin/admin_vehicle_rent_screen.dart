@@ -1,0 +1,179 @@
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:earthmovers_app/core/routes/route_manager.dart';
+import 'package:earthmovers_app/core/theme/app_theme.dart';
+import 'package:earthmovers_app/core/widgets/glass_card.dart';
+import 'package:earthmovers_app/core/widgets/gradient_scaffold.dart';
+
+class AdminVehicleRent extends StatefulWidget {
+  const AdminVehicleRent({Key? key}) : super(key: key);
+
+  @override
+  _AdminVehicleRentState createState() => _AdminVehicleRentState();
+}
+
+class _AdminVehicleRentState extends State<AdminVehicleRent> {
+  @override
+  Widget build(BuildContext context) {
+    final categories = [
+      {
+        'title': 'JCB Fleet',
+        'subtitle': 'Manage earthmovers & excavators availability',
+        'tag': 'HEAVY DUTY',
+        'image': 'images/jcb.jpg',
+        'route': RouteManager.adminJcbStock,
+        'accent': AppTheme.amber,
+      },
+      {
+        'title': 'Tractor Fleet',
+        'subtitle': 'Manage agricultural & hauling tractors',
+        'tag': 'HAULING',
+        'image': 'images/tractors.png',
+        'route': RouteManager.adminTractorStock,
+        'accent': AppTheme.blue,
+      },
+      {
+        'title': 'Tipper Trucks',
+        'subtitle': 'Manage material transport lorries & tippers',
+        'tag': 'TRANSPORT',
+        'image': 'images/tippers.png',
+        'route': RouteManager.adminTipperStock,
+        'accent': AppTheme.emerald,
+      },
+    ];
+
+    return GradientScaffold(
+      showOrbs: false,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: AppTheme.textPrimary, size: 20),
+          onPressed: () => Navigator.pushReplacementNamed(context, RouteManager.adminHome),
+        ),
+        title: Text(
+          'Fleet Inventory Management',
+          style: GoogleFonts.poppins(
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+            fontSize: 18,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: ListView.separated(
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          itemCount: categories.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 16),
+          itemBuilder: (context, index) {
+            final cat = categories[index];
+            final accent = cat['accent'] as Color;
+
+            return BentGlassCard(
+              onTap: () => Navigator.pushNamed(context, cat['route'] as String),
+              borderColor: accent.withOpacity(0.3),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+                        child: Container(
+                          height: 150,
+                          width: double.infinity,
+                          color: AppTheme.surfaceLight,
+                          child: Image.asset(
+                            cat['image'] as String,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Center(child: Icon(Icons.agriculture_rounded, size: 48, color: AppTheme.textMuted)),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 12,
+                        left: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(0.9),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            cat['tag'] as String,
+                            style: GoogleFonts.poppins(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cat['title'] as String,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                cat['subtitle'] as String,
+                                style: GoogleFonts.poppins(
+                                  fontSize: 12,
+                                  color: AppTheme.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: accent.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                            border: Border.all(color: accent.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                "Manage",
+                                style: GoogleFonts.poppins(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: accent,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(Icons.arrow_forward_rounded, size: 16, color: accent),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}

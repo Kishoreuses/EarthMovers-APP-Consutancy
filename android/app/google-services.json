@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1040180772911",
+    "project_id": "earthmovers-app-eb13e",
+    "storage_bucket": "earthmovers-app-eb13e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1040180772911:android:5de9cc160e4141a47f06da",
+        "android_client_info": {
+          "package_name": "com.example.earthmovers_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBVffVi3nqvrH7ThQCID0Asx5TNRrYEpbc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
