@@ -1,0 +1,12 @@
+so this is my current project 
+this is earth movers app
+This project aims to deliver Building construction materials and renting vehicles 
+and this app has three users(customer, Admin,Driver)
+
+So in this project when the customer logged in then it goes to Home Page 
+in the home page Butttons are not working then i exit and reopen the application then buttons are working (navigate)
+
+give the smooth navigation
+
+
+vds695758@gmail.com

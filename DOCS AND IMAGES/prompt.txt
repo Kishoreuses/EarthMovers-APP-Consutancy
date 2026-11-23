@@ -1,0 +1,2 @@
+give the Drivers  Page that contains driver details like name Phone number, status 
+todayJobs count(based on admin assign orders assign it is increased when the driver order is finished) it is initialize 0 after 24 hours completed

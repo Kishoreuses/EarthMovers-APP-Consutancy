@@ -1,0 +1,87 @@
+import 'package:earthmovers_app/firebase_options.dart';
+import 'package:earthmovers_app/pages/Home.dart';
+import 'package:earthmovers_app/pages/Logo.dart';
+import 'package:earthmovers_app/Admin/AdminHome.dart';
+import 'package:earthmovers_app/Driver/DriverHome.dart'; // ✅ Import DriverHome
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'routes/RouteManager.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Firebase Messaging (optional if you use push notifications)
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  Future<Widget> _getUserScreen(User? user) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (user == null) {
+      await prefs.remove('userRole'); // Clear role if logged out
+      return const Logo();
+    }
+
+    // Try getting role from SharedPreferences
+    String? savedRole = prefs.getString('userRole');
+
+    if (savedRole != null) {
+      if (savedRole == 'admin') return AdminHome();
+      if (savedRole == 'user') return Home();
+      if (savedRole == 'driver') return DriverHome(); // ✅ New
+    }
+
+    // Fallback to Firestore if no cached role
+    try {
+      final userDoc = await FirebaseFirestore.instance.collection('Users').doc(user.uid).get();
+      if (userDoc.exists && userDoc.data() != null) {
+        final role = userDoc['role'] ?? '';
+        await prefs.setString('userRole', role); // ✅ Save role
+
+        if (role == 'admin') return AdminHome();
+        if (role == 'user') return Home();
+        if (role == 'driver') return DriverHome(); // ✅ New
+      }
+    } catch (e) {
+      print("Error fetching role: $e");
+    }
+
+    return const Logo(); // fallback
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      onGenerateRoute: RouteManager.generateRoute,
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          return FutureBuilder<Widget>(
+            future: _getUserScreen(snapshot.data),
+            builder: (context, userSnapshot) {
+              if (userSnapshot.connectionState == ConnectionState.waiting) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              return userSnapshot.data ?? const Logo();
+            },
+          );
+        },
+      ),
+    );
+  }
+}

@@ -1,0 +1,256 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+class AdminOrderAndRentingDetails extends StatefulWidget {
+  @override
+  _AdminOrderAndRentingDetailsState createState() => _AdminOrderAndRentingDetailsState();
+}
+
+class _AdminOrderAndRentingDetailsState extends State<AdminOrderAndRentingDetails> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 4, vsync: this);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Orders & Rentals Management'),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: 'Current Orders'),
+            Tab(text: 'Past Orders'),
+            Tab(text: 'Current Renting'),
+            Tab(text: 'Past Renting'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          OrdersWidget(isPast: false),
+          OrdersWidget(isPast: true),
+          RentalsWidget(isPast: false),
+          RentalsWidget(isPast: true),
+        ],
+      ),
+    );
+  }
+}
+
+class OrdersWidget extends StatelessWidget {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final bool isPast;
+
+  OrdersWidget({required this.isPast});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('Users').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+        var users = snapshot.data!.docs;
+        return ListView(
+          children: users.map((user) => _buildUserOrders(user)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildUserOrders(DocumentSnapshot user) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('Users').doc(user.id).collection('orders').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return Container();
+        var filteredOrders = snapshot.data!.docs.where((order) =>
+        isPast ? order['status'] == 'Delivered' : order['status'] != 'Delivered'
+        ).toList();
+        if (filteredOrders.isEmpty) return Container();
+
+        return ExpansionTile(
+          title: Text('${user['username']} Orders'),
+          children: filteredOrders.map((order) => _buildOrderItem(order, user.id)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildOrderItem(DocumentSnapshot order, String userId) {
+    return ListTile(
+      title: Text(order['name']),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Status: ${order['status']}'),
+          if (!isPast) _buildStatusDropdown(order, userId),
+          if (!isPast) _buildDriverDropdown(order, userId),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusDropdown(DocumentSnapshot order, String userId) {
+    return DropdownButton<String>(
+      value: order['status'],
+      items: ['Pending', 'Shipped', 'On the way', 'Delivered'].map((status) {
+        return DropdownMenuItem(value: status, child: Text(status));
+      }).toList(),
+      onChanged: (newStatus) {
+        if (newStatus != null) {
+          _firestore.collection('Users').doc(userId).collection('orders').doc(order.id).update({'status': newStatus});
+        }
+      },
+    );
+  }
+
+  Widget _buildDriverDropdown(DocumentSnapshot order, String userId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('Users').where('role', isEqualTo: 'driver').where('available', isEqualTo: true).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return CircularProgressIndicator();
+        var drivers = snapshot.data!.docs;
+
+        if (drivers.isEmpty) {
+          return Text("No available drivers");
+        }
+
+        return DropdownButton<String>(
+          hint: Text(order['driverName'] ?? 'Assign Driver'),
+          items: drivers.map((driver) {
+            return DropdownMenuItem(
+              value: driver.id,
+              child: Text(driver['username'] ?? 'Unknown'),
+            );
+          }).toList(),
+          onChanged: (driverId) {
+            if (driverId != null) {
+              _assignDriver(userId, order.id, driverId);
+            }
+          },
+        );
+      },
+    );
+  }
+
+  void _assignDriver(String userId, String orderId, String driverId) {
+    _firestore.collection('Users').doc(driverId).get().then((driverDoc) {
+      _firestore.collection('Users').doc(userId).collection('orders').doc(orderId).update({
+        'driverName': driverDoc['username'],
+        'driverPhone': driverDoc['phone'],
+      });
+      _firestore.collection('Users').doc(driverId).update({'available': false});
+    });
+  }
+}
+
+class RentalsWidget extends StatelessWidget {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final bool isPast;
+
+  RentalsWidget({required this.isPast});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('Users').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+        var users = snapshot.data!.docs;
+        return ListView(
+          children: users.map((user) => _buildUserRentals(user)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildUserRentals(DocumentSnapshot user) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('Users').doc(user.id).collection('rented').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return Container();
+        var filteredRentals = snapshot.data!.docs.where((rental) =>
+        isPast ? rental['status'] == 'Returned' : rental['status'] != 'Returned'
+        ).toList();
+        if (filteredRentals.isEmpty) return Container();
+
+        return ExpansionTile(
+          title: Text('${user['username']} Rentals'),
+          children: filteredRentals.map((rental) => _buildRentalItem(rental, user.id)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildRentalItem(DocumentSnapshot rental, String userId) {
+    return ListTile(
+      title: Text(rental['name']),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Status: ${rental['status']}'),
+          if (!isPast) _buildStatusDropdown(rental, userId),
+          if (!isPast) _buildDriverDropdown(rental, userId),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusDropdown(DocumentSnapshot rental, String userId) {
+    return DropdownButton<String>(
+      value: rental['status'],
+      items: ['Pending', 'Rented', 'Returned'].map((status) {
+        return DropdownMenuItem(value: status, child: Text(status));
+      }).toList(),
+      onChanged: (newStatus) {
+        if (newStatus != null) {
+          _firestore.collection('Users').doc(userId).collection('rented').doc(rental.id).update({'status': newStatus});
+        }
+      },
+    );
+  }
+
+  Widget _buildDriverDropdown(DocumentSnapshot rental, String userId) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('Users').where('role', isEqualTo: 'driver').where('available', isEqualTo: true).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return CircularProgressIndicator();
+        var drivers = snapshot.data!.docs;
+
+        if (drivers.isEmpty) {
+          return Text("No available drivers");
+        }
+
+        return DropdownButton<String>(
+          hint: Text(rental['driverName'] ?? 'Assign Driver'),
+          items: drivers.map((driver) {
+            return DropdownMenuItem(
+              value: driver.id,
+              child: Text(driver['username'] ?? 'Unknown'),
+            );
+          }).toList(),
+          onChanged: (driverId) {
+            if (driverId != null) {
+              _assignDriver(userId, rental.id, driverId);
+            }
+          },
+        );
+      },
+    );
+  }
+
+  void _assignDriver(String userId, String rentalId, String driverId) {
+    _firestore.collection('Users').doc(driverId).get().then((driverDoc) {
+      _firestore.collection('Users').doc(userId).collection('rented').doc(rentalId).update({
+        'driverName': driverDoc['username'],
+        'driverPhone': driverDoc['phone'],
+      });
+      _firestore.collection('Users').doc(driverId).update({'available': false});
+    });
+  }
+}

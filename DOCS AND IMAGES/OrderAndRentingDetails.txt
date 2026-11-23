@@ -1,0 +1,145 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+class OrderAndRentingDetails extends StatefulWidget {
+  @override
+  _OrderAndRentingDetailsState createState() => _OrderAndRentingDetailsState();
+}
+
+class _OrderAndRentingDetailsState extends State<OrderAndRentingDetails> with SingleTickerProviderStateMixin {
+  User? user = FirebaseAuth.instance.currentUser;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Your Orders & Rentals", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.blueGrey[900],
+        centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          tabs: [
+            Tab(icon: Icon(Icons.shopping_bag), text: "Orders"),
+            Tab(icon: Icon(Icons.local_shipping), text: "Rentals"),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildOrdersTab(),
+          _buildRentalsTab(),
+        ],
+      ),
+    );
+  }
+
+  /// Fetch and display orders
+  Widget _buildOrdersTab() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('orders').snapshots(),
+      builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text("No orders found", style: TextStyle(fontSize: 18, color: Colors.white)));
+        }
+
+        return ListView(
+          padding: EdgeInsets.all(10),
+          children: snapshot.data!.docs.map((order) => _buildOrderCard(order)).toList(),
+        );
+      },
+    );
+  }
+
+  /// Fetch and display rented vehicles
+  Widget _buildRentalsTab() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('rented').snapshots(),
+      builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text("No rented vehicles found", style: TextStyle(fontSize: 18, color: Colors.white)));
+        }
+
+        return ListView(
+          padding: EdgeInsets.all(10),
+          children: snapshot.data!.docs.map((rental) => _buildRentalCard(rental)).toList(),
+        );
+      },
+    );
+  }
+
+  /// Card for ordered products
+  Widget _buildOrderCard(DocumentSnapshot order) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 5,
+      margin: EdgeInsets.only(bottom: 15),
+      child: Padding(
+        padding: EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(order['image_url'], fit: BoxFit.cover, width: double.infinity, height: 150),
+            ),
+            SizedBox(height: 10),
+            Text(order['name'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            SizedBox(height: 5),
+            Text("Quantity: ${order['quantity']}", style: TextStyle(fontSize: 16)),
+            Text("Total Price: ₹${order['totalPrice']}", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.redAccent)),
+            SizedBox(height: 5),
+            Text("Status: ${order['status']}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.blue)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Card for rented vehicles
+  Widget _buildRentalCard(DocumentSnapshot rental) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 5,
+      margin: EdgeInsets.only(bottom: 15),
+      child: Padding(
+        padding: EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(rental['image_url'], fit: BoxFit.cover, width: double.infinity, height: 150),
+            ),
+            SizedBox(height: 10),
+            Text(rental['name'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            SizedBox(height: 5),
+            Text("Vehicle No: ${rental['No']}", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+            Text("Price per Hour: ₹${rental['pricePerHour']}", style: TextStyle(fontSize: 16)),
+            Text("Total Price: ₹${rental['totalPrice']}", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue)),
+            SizedBox(height: 5),
+            Text("RentedAt: ${rental['rentedAt']}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+            Text("Status: ${rental['status']}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+            Text("Driver_Name: ${rental['driverName']}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+            Text("Driver_Phone: ${rental['driverPhone']}", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green)),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,174 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
+class OrderAndRentingDetails extends StatefulWidget {
+  @override
+  _OrderAndRentingDetailsState createState() => _OrderAndRentingDetailsState();
+}
+
+class _OrderAndRentingDetailsState extends State<OrderAndRentingDetails> with SingleTickerProviderStateMixin {
+  User? user = FirebaseAuth.instance.currentUser;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Your Orders & Rentals", style: TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.blueGrey[900],
+        centerTitle: true,
+        bottom: TabBar(
+          controller: _tabController,
+          indicatorColor: Colors.white,
+          tabs: [
+            Tab(icon: Icon(Icons.shopping_bag), text: "Orders"),
+            Tab(icon: Icon(Icons.local_shipping), text: "Rentals"),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildOrdersTab(),
+          _buildRentalsTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrdersTab() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('orders').snapshots(),
+      builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text("No orders found", style: TextStyle(fontSize: 18)));
+        }
+
+        return ListView(
+          padding: EdgeInsets.all(10),
+          children: snapshot.data!.docs.map((order) => _buildTrackingCard(order)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildRentalsTab() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance.collection('Users').doc(user!.uid).collection('rented').snapshots(),
+      builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return Center(child: Text("No rented vehicles found", style: TextStyle(fontSize: 18)));
+        }
+
+        return ListView(
+          padding: EdgeInsets.all(10),
+          children: snapshot.data!.docs.map((rental) => _buildTrackingCard(rental, isRental: true)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildTrackingCard(DocumentSnapshot doc, {bool isRental = false}) {
+    // Order statuses
+    List<String> statusStepsOrder = [
+      'Order Placed',
+      'Material is shipped',
+      'On the way',
+      'Delivered',
+    ];
+
+    // Rental statuses
+    List<String> statusStepsRental = [
+      'Pending',
+      'Rented',
+      'Returned',
+    ];
+
+    String status = doc['status'];
+
+    int getOrderStepIndex(String status) {
+      switch (status.toLowerCase()) {
+        case 'pending':
+          return 0;
+        case 'shipped':
+          return 1;
+        case 'on the way':
+          return 2;
+        case 'delivered':
+          return 3;
+        default:
+          return 0;
+      }
+    }
+
+    int getRentalStepIndex(String status) {
+      switch (status.toLowerCase()) {
+        case 'pending':
+          return 0;
+        case 'rented':
+          return 1;
+        case 'returned':
+          return 2;
+        default:
+          return 0;
+      }
+    }
+
+    final currentStep = isRental ? getRentalStepIndex(status) : getOrderStepIndex(status);
+    final statusSteps = isRental ? statusStepsRental : statusStepsOrder;
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 5,
+      margin: EdgeInsets.only(bottom: 15),
+      child: Padding(
+        padding: EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(doc['image_url'], fit: BoxFit.cover, width: double.infinity, height: 150),
+            ),
+            SizedBox(height: 10),
+            Text(doc['name'], style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            if (!isRental)
+              Text("Quantity: ${doc['quantity']}", style: TextStyle(fontSize: 16)),
+            Text("Total Price: ₹${doc['totalPrice']}", style: TextStyle(fontSize: 16, color: Colors.red)),
+            if (isRental)
+              Text("Vehicle No: ${doc['No']}", style: TextStyle(fontSize: 16)),
+            Text("Status: ${doc['status']}", style: TextStyle(fontSize: 16, color: Colors.blue)),
+            Text("Driver: ${doc['driverName']} (${doc['driverPhone']})", style: TextStyle(fontSize: 16, color: Colors.green)),
+            SizedBox(height: 10),
+            Stepper(
+              physics: NeverScrollableScrollPhysics(),
+              currentStep: currentStep,
+              controlsBuilder: (context, _) => SizedBox.shrink(),
+              steps: List.generate(statusSteps.length, (index) {
+                return Step(
+                  title: Text(statusSteps[index]),
+                  content: SizedBox.shrink(),
+                  isActive: index <= currentStep,
+                  state: index <= currentStep ? StepState.complete : StepState.indexed,
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}

@@ -1,0 +1,315 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+class AdminOrderAndRentingDetails extends StatefulWidget {
+  @override
+  _AdminOrderAndRentingDetailsState createState() =>
+      _AdminOrderAndRentingDetailsState();
+}
+
+class _AdminOrderAndRentingDetailsState extends State<AdminOrderAndRentingDetails>
+    with SingleTickerProviderStateMixin {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  late TabController _tabController;
+  String? adminToken;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+    _getAdminToken();
+    _listenForNewOrdersAndRentals();
+  }
+
+  /// Fetch Admin's FCM Token
+  Future<void> _getAdminToken() async {
+    DocumentSnapshot adminDoc =
+    await _firestore.collection('Admin').doc('admin_token').get();
+    if (adminDoc.exists) {
+      setState(() {
+        adminToken = adminDoc['fcm_token'];
+      });
+    }
+  }
+
+  /// Listen for new orders or rentals and notify admin
+  void _listenForNewOrdersAndRentals() {
+    _firestore.collection('Users').snapshots().listen((snapshot) {
+      if (snapshot.docChanges.isNotEmpty) {
+        snapshot.docChanges.forEach((change) {
+          String userId = change.doc.id;
+          _listenForUserOrders(userId);
+          _listenForUserRentals(userId);
+        });
+      }
+    });
+  }
+
+  /// Listen for orders of a specific user
+  void _listenForUserOrders(String userId) {
+    _firestore
+        .collection('Users')
+        .doc(userId)
+        .collection('orders')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.docChanges.isNotEmpty) {
+        _sendAdminNotification("New Order Alert", "A new order has been placed by $userId!");
+      }
+    });
+  }
+
+  /// Listen for rentals of a specific user
+  void _listenForUserRentals(String userId) {
+    _firestore
+        .collection('Users')
+        .doc(userId)
+        .collection('rented')
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.docChanges.isNotEmpty) {
+        _sendAdminNotification("New Rental Alert", "A new rental request has been placed by $userId!");
+      }
+    });
+  }
+
+  /// Send push notification to Admin
+  Future<void> _sendAdminNotification(String title, String message) async {
+    if (adminToken == null) return;
+
+    FirebaseMessaging.instance.sendMessage(
+      to: adminToken!,
+      data: {'title': title, 'body': message},
+    );
+  }
+
+  /// Update order or rental status in Firestore
+  Future<void> updateStatus(String userId, String collection, String docId,
+      String status, String customerId) async {
+    try {
+      await _firestore
+          .collection('Users')
+          .doc(userId)
+          .collection(collection)
+          .doc(docId)
+          .update({'status': status});
+      _sendCustomerNotification(customerId, status);
+    } catch (e) {
+      print("Error updating status: $e");
+    }
+  }
+
+  /// Send push notification to customer
+  Future<void> _sendCustomerNotification(
+      String customerId, String status) async {
+    try {
+      DocumentSnapshot customerDoc =
+      await _firestore.collection('Users').doc(customerId).get();
+      if (customerDoc.exists) {
+        String? token = customerDoc['fcm_token'];
+        if (token != null) {
+          FirebaseMessaging.instance.sendMessage(
+            to: token,
+            data: {'title': 'Update', 'body': 'Your status is now: $status'},
+          );
+        }
+      }
+    } catch (e) {
+      print("Error sending notification: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Orders & Rentals Management'),
+        backgroundColor: Colors.orangeAccent,
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(text: 'Orders'),
+            Tab(text: 'Rentals'),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildList('orders'),
+          _buildList('rented'),
+        ],
+      ),
+    );
+  }
+
+  /// Fetch and display Orders or Rentals for each user
+  Widget _buildList(String collection) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore.collection('Users').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        var users = snapshot.data!.docs;
+
+        if (users.isEmpty) {
+          return Center(child: Text("No users found"));
+        }
+
+        return ListView.builder(
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            var user = users[index];
+
+            return Card(
+              margin: EdgeInsets.all(10),
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('User ID: ${user.id}', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text('Username: ${user['username'] ?? 'N/A'}'),
+                    Text('Phone: ${user['phone'] ?? 'N/A'}'),
+                    Text('Email: ${user['email'] ?? 'N/A'}'),
+                    Text('Address: ${user['address'] ?? 'N/A'}'),
+                    SizedBox(height: 10),
+                    Text('Orders:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    _buildUserOrders(user.id, collection),
+                    SizedBox(height: 10),
+                    Text('Rentals:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    _buildUserRentals(user.id, collection),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Fetch and display orders of a specific user
+  Widget _buildUserOrders(String userId, String collection) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('Users')
+          .doc(userId)
+          .collection('orders')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        var orders = snapshot.data!.docs;
+
+        if (orders.isEmpty) {
+          return Center(child: Text("No orders found"));
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          itemCount: orders.length,
+          itemBuilder: (context, index) {
+            var order = orders[index];
+
+            return Card(
+              margin: EdgeInsets.only(bottom: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Order ID: ${order.id}'),
+                    Text('Item: ${order['name']}'),
+                    Text('Status: ${order['status']}'),
+                    SizedBox(height: 10),
+                    DropdownButton<String>(
+                      value: order['status'],
+                      items: ['Pending', 'Material is shipped', 'On the way']
+                          .map((status) {
+                        return DropdownMenuItem(
+                          value: status,
+                          child: Text(status),
+                        );
+                      }).toList(),
+                      onChanged: (newStatus) {
+                        if (newStatus != null) {
+                          updateStatus(userId, 'orders', order.id, newStatus, order['userId']);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Fetch and display rentals of a specific user
+  Widget _buildUserRentals(String userId, String collection) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _firestore
+          .collection('Users')
+          .doc(userId)
+          .collection('rented')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        var rentals = snapshot.data!.docs;
+
+        if (rentals.isEmpty) {
+          return Center(child: Text("No rentals found"));
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          itemCount: rentals.length,
+          itemBuilder: (context, index) {
+            var rental = rentals[index];
+
+            return Card(
+              margin: EdgeInsets.only(bottom: 10),
+              child: Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Rental ID: ${rental.id}'),
+                    Text('Item: ${rental['name']}'),
+                    Text('Status: ${rental['status']}'),
+                    SizedBox(height: 10),
+                    DropdownButton<String>(
+                      value: rental['status'],
+                      items: ['Pending', 'Rented', 'Returned'].map((status) {
+                        return DropdownMenuItem(
+                          value: status,
+                          child: Text(status),
+                        );
+                      }).toList(),
+                      onChanged: (newStatus) {
+                        if (newStatus != null) {
+                          updateStatus(userId, 'rented', rental.id, newStatus, rental['userId']);
+                        }
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}

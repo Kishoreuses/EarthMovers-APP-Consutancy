@@ -1,0 +1,144 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:earthmovers_app/routes/RouteManager.dart';
+
+class AdminHome extends StatefulWidget {
+  @override
+  _AdminHomeState createState() => _AdminHomeState();
+}
+
+class _AdminHomeState extends State<AdminHome> with SingleTickerProviderStateMixin {
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  User? _admin;
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _admin = _auth.currentUser;
+    _controller = AnimationController(vsync: this, duration: Duration(seconds: 5))
+      ..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Admin Dashboard'),
+        backgroundColor: Color(0xFFF3B968),
+        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.account_circle, size: 30),
+            onPressed: () {
+              Navigator.pushNamed(context, RouteManager.adminProfile);
+            },
+          ),
+        ],
+      ),
+      body: Stack(
+        children: [
+          // Animated background effect
+          AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              return CustomPaint(
+                painter: BubblePainter(_controller.value),
+                child: Container(),
+              );
+            },
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: GridView(
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 15,
+                mainAxisSpacing: 15,
+                childAspectRatio: 1, // Ensures equal height & width for each item
+              ),
+              children: [
+                _buildMenuCard(context, 'Building Materials', 'images/materials.jpg', Colors.orange, RouteManager.adminStocks),
+                _buildMenuCard(context, 'Renting Vehicles', 'images/vehicles.jpg', Colors.blue, RouteManager.adminVehicleRent),
+                _buildMenuCard(context, 'Orders', 'images/orders.png', Colors.green, RouteManager.adminOrderAndRentingDetails),
+                _buildMenuCard(context, 'Drivers', 'images/drivers.jpg', Colors.purple, RouteManager.adminProfile),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Builds each menu card with modern UI
+  Widget _buildMenuCard(BuildContext context, String title, String imagePath, Color color, String routeName) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(context, routeName);
+      },
+      child: AnimatedContainer(
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(15),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black26,
+              blurRadius: 5,
+              spreadRadius: 2,
+              offset: Offset(2, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.vertical(top: Radius.circular(15)),
+                child: Image.asset(imagePath, fit: BoxFit.cover, width: double.infinity),
+              ),
+            ),
+            Container(
+              padding: EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(15)),
+              ),
+              child: Center(
+                child: Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Background bubbles animation
+class BubblePainter extends CustomPainter {
+  final double value;
+  BubblePainter(this.value);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.orange.withOpacity(0.2);
+    canvas.drawCircle(Offset(size.width * value, size.height * 0.3), 80, paint);
+    canvas.drawCircle(Offset(size.width * (1 - value), size.height * 0.7), 100, paint);
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) => true;
+}

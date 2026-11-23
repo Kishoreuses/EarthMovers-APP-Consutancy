@@ -1,0 +1,203 @@
+import 'dart:io';
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:path_provider/path_provider.dart';
+
+class OrderAndRentingDetails extends StatefulWidget {
+  @override
+  _OrderAndRentingDetailsState createState() => _OrderAndRentingDetailsState();
+}
+
+class _OrderAndRentingDetailsState extends State<OrderAndRentingDetails>
+    with SingleTickerProviderStateMixin {
+  User? user = FirebaseAuth.instance.currentUser;
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text("Your Orders & Rentals"),
+        centerTitle: true,
+        backgroundColor: Colors.blueGrey[900],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: [
+            Tab(icon: Icon(Icons.shopping_bag), text: "Orders"),
+            Tab(icon: Icon(Icons.local_shipping), text: "Rentals"),
+          ],
+        ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: [
+          _buildOrdersTab(),
+          _buildRentalsTab(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOrdersTab() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance
+          .collection('Users')
+          .doc(user!.uid)
+          .collection('orders')
+          .snapshots(),
+      builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) return Center(child: Text("No orders found"));
+        return ListView(
+          padding: EdgeInsets.all(10),
+          children: docs.map((doc) => _buildTrackingCard(doc)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildRentalsTab() {
+    return StreamBuilder(
+      stream: FirebaseFirestore.instance
+          .collection('Users')
+          .doc(user!.uid)
+          .collection('rented')
+          .snapshots(),
+      builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+        if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+        final docs = snapshot.data!.docs;
+        if (docs.isEmpty) return Center(child: Text("No rentals found"));
+        return ListView(
+          padding: EdgeInsets.all(10),
+          children: docs.map((doc) => _buildTrackingCard(doc, isRental: true)).toList(),
+        );
+      },
+    );
+  }
+
+  Widget _buildTrackingCard(DocumentSnapshot doc, {bool isRental = false}) {
+    List<String> orderSteps = ['Order Placed', 'Shipped', 'On the way', 'Delivered'];
+    List<String> rentalSteps = ['Pending', 'Rented', 'Returned'];
+
+    String status = doc['status'];
+    final steps = isRental ? rentalSteps : orderSteps;
+
+    int currentStep = steps.indexWhere(
+          (step) => step.toLowerCase() == status.toLowerCase(),
+    );
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      elevation: 5,
+      margin: EdgeInsets.only(bottom: 15),
+      child: Padding(
+        padding: EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (doc['image_url'] != null)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.network(doc['image_url'], height: 150, fit: BoxFit.cover),
+              ),
+            SizedBox(height: 10),
+            Text(doc['name'] ?? '', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+            if (!isRental) Text("Quantity: ${doc['quantity']}"),
+            Text("Total Price: ₹${doc['totalPrice']}"),
+            Text("Status: $status", style: TextStyle(color: Colors.blue)),
+            if (doc['driverName'] != null)
+              Text("Driver: ${doc['driverName']} (${doc['driverPhone']})", style: TextStyle(color: Colors.green)),
+            Stepper(
+              currentStep: currentStep < 0 ? 0 : currentStep,
+              controlsBuilder: (_, __) => SizedBox.shrink(),
+              steps: List.generate(steps.length, (index) {
+                return Step(
+                  title: Text(steps[index]),
+                  content: SizedBox.shrink(),
+                  isActive: index <= currentStep,
+                  state: index <= currentStep ? StepState.complete : StepState.indexed,
+                );
+              }),
+            ),
+            if ((status == 'Delivered' && !isRental) || (status == 'Returned' && isRental))
+              Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton.icon(
+                  icon: Icon(Icons.picture_as_pdf),
+                  label: Text("Download Bill"),
+                  onPressed: () => generatePdfBill(doc.data() as Map<String, dynamic>, isRental),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> generatePdfBill(Map<String, dynamic> data, bool isRental) async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+    final formatter = DateFormat('yyyy-MM-dd HH:mm');
+    final formattedDate = formatter.format(now);
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text("Earthmovers App", style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 10),
+            pw.Text("Date: $formattedDate"),
+            pw.SizedBox(height: 10),
+            pw.Text("Customer Name: ${data['customerName']}"),
+            pw.Text("Phone: ${data['customerPhone']}"),
+            pw.Text("Address: ${data['address']}"),
+            pw.Divider(),
+            pw.Text("Item: ${data['name']}"),
+            if (!isRental) pw.Text("Quantity: ${data['quantity']}"),
+            pw.Text("Total Price: ₹${data['totalPrice']}"),
+            if (isRental) pw.Text("Vehicle No: ${data['No']}"),
+            pw.SizedBox(height: 20),
+            pw.Text("Thank you for choosing Earthmovers!", style: pw.TextStyle(fontSize: 16)),
+          ],
+        ),
+      ),
+    );
+
+    // Request storage permission
+    final status = await Permission.storage.request();
+    if (!status.isGranted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Storage permission is required to save the bill.")),
+      );
+      return;
+    }
+
+    // Use Downloads directory for Android
+    Directory? dir;
+    if (Platform.isAndroid) {
+      dir = Directory('/storage/emulated/0/Download');
+    } else {
+      dir = await getApplicationDocumentsDirectory();
+    }
+
+    final file = File("${dir.path}/Bill_${DateTime.now().millisecondsSinceEpoch}.pdf");
+    await file.writeAsBytes(await pdf.save());
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Bill saved to ${file.path}")),
+    );
+  }
+}
